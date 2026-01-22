@@ -104,17 +104,28 @@ const FilmController: React.FC<FilmControllerProps> = ({ scenes }) => {
             if (index === state.currentSceneIndex) render();
         };
 
+        const cleanupCache = (currentIndex: number) => {
+            Object.keys(imagesCache.current).forEach(id => {
+                const sceneIndex = scenes.findIndex(s => s.id === id);
+                // Keep current, previous, and next scenes in memory
+                if (Math.abs(sceneIndex - currentIndex) > 1) {
+                    delete imagesCache.current[id];
+                    loadedScenes.current.delete(id);
+                }
+            });
+        };
+
         // Master Timeline
         const master = gsap.timeline({
             scrollTrigger: {
                 trigger: containerRef.current,
                 start: "top top",
-                end: `+=${scenes.length * 200}%`,
+                end: `+=${scenes.length * 300}%`, // Increased height for 24fps smoothness
                 pin: true,
-                scrub: 1,
+                scrub: 0.8, // Premium scrub speed
                 anticipatePin: 1,
+                invalidateOnRefresh: true,
                 onUpdate: (self) => {
-                    // Logic to determine active scene and load ahead
                     const progress = self.progress;
                     const totalScenes = scenes.length;
                     const rawIndex = progress * totalScenes;
@@ -124,9 +135,13 @@ const FilmController: React.FC<FilmControllerProps> = ({ scenes }) => {
                     state.currentSceneIndex = sceneIndex;
                     state.sceneFrame = Math.floor(sceneProgress * (scenes[sceneIndex].frameCount - 1));
 
-                    // Load current and next
+                    // Proximity loading
                     loadSceneImages(sceneIndex);
                     if (sceneIndex < totalScenes - 1) loadSceneImages(sceneIndex + 1);
+                    if (sceneIndex > 0) loadSceneImages(sceneIndex - 1);
+
+                    // Memory stabilization
+                    if (state.sceneFrame % 10 === 0) cleanupCache(sceneIndex);
 
                     render();
                 }
